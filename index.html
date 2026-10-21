@@ -193,6 +193,16 @@ body.cooking .tray{bottom:calc(92px + env(safe-area-inset-bottom,0px));padding-b
 .dedic b{font-weight:800;font-size:1.15rem;display:block}
 .dedic span{color:var(--muted);font-size:.98rem}
 .kick.love{color:var(--accent)}
+.plan{display:grid;gap:.7rem;margin:1rem 0 5rem}
+.prow{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;padding:.8rem 1rem;border:1.5px solid var(--line);border-radius:16px;background:var(--surface)}
+.pday{min-width:8.5rem;display:grid;line-height:1.2}.pday b{font-weight:800}.pday span{color:var(--muted);font-size:.9rem}
+.pname{flex:1;min-width:10rem;text-align:left;background:none;border:0;color:var(--ink);font:700 1.1rem var(--body);padding:.4rem 0;display:grid;gap:.1rem;cursor:pointer}
+.pname small{color:var(--muted);font-weight:400;font-size:.9rem}.pname.empty{color:var(--muted);font-weight:400;cursor:default}
+.plist{display:grid;gap:.5rem;max-height:55vh;overflow:auto}
+.pitem{display:grid;gap:.1rem;text-align:left;padding:.8rem 1rem;min-height:56px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer}
+.pitem small{color:var(--muted)}
+button.dedic{width:100%;text-align:left;color:var(--ink);font:inherit;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+button.dedic .hh,button.dedic span{color:var(--accent-ink)}
 </style>
 
 </head>
@@ -202,6 +212,7 @@ body.cooking .tray{bottom:calc(92px + env(safe-area-inset-bottom,0px));padding-b
     <div class="brand">Bubu's Kitchen <span aria-hidden="true" style="color:var(--accent)">♥</span><small>Cooked with love · stainless pan edition</small></div>
     <div class="seg" role="group" aria-label="Section">
       <button type="button" id="nav-library" data-act="nav" data-v="library" aria-pressed="true">Recipes</button>
+      <button type="button" id="nav-plan" data-act="nav" data-v="plan" aria-pressed="false">Plan</button>
       <button type="button" id="nav-guide" data-act="nav" data-v="guide" aria-pressed="false">Guide</button>
     </div>
     <button type="button" class="btn" data-act="new">+ New</button>
@@ -223,7 +234,7 @@ var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){r
 
 /* ---------- storage ---------- */
 var KEY='gfk.v1', storeOK=true;
-var store={edits:{},added:[],deleted:[],favs:[]};
+var store={edits:{},added:[],deleted:[],favs:[],plan:{}};
 function loadStore(){
   try{
     localStorage.setItem('gfk.t','1');localStorage.removeItem('gfk.t');
@@ -374,9 +385,10 @@ function safeUrl(u){return /^https?:\/\/[^\s"'<>]+$/i.test(u)?u:null}
 
 /* ---------- views ---------- */
 function setNav(){
-  var lib=S.view!=='guide';
+  var lib=S.view!=='guide'&&S.view!=='plan';
   $('#nav-library').setAttribute('aria-pressed',lib?'true':'false');
-  $('#nav-guide').setAttribute('aria-pressed',lib?'false':'true');
+  $('#nav-plan').setAttribute('aria-pressed',S.view==='plan'?'true':'false');
+  $('#nav-guide').setAttribute('aria-pressed',S.view==='guide'?'true':'false');
 }
 function render(){
   setNav();
@@ -385,13 +397,15 @@ function render(){
   else if(S.view==='recipe')v.innerHTML=recipeView();
   else if(S.view==='edit')v.innerHTML=editView();
   else if(S.view==='guide')v.innerHTML=guideView();
+  else if(S.view==='plan')v.innerHTML=planView();
   if(S.view==='library')renderGrid();
 }
 function go(view,id){S.view=view;if(id!==undefined)S.id=id;render();window.scrollTo(0,0)}
 
 function libraryView(){
   var chips=FILTERS.map(function(f){return '<button type="button" class="chip" data-act="filter" data-f="'+f[0]+'" aria-pressed="'+(S.filter===f[0])+'">'+esc(f[1])+'</button>'}).join('');
-  return '<div class="dedic"><div class="hh" aria-hidden="true">♥</div><div><b>For Bubu, my love</b><span>Every recipe in here is something to cook together. Made with love, one pan at a time.</span></div></div>'+'<div class="tools"><input id="q" class="search" type="search" placeholder="Search recipes, cuisines or ingredients" value="'+esc(S.q)+'" aria-label="Search recipes">'+
+  var tr=store.plan[dkey(new Date())]?byId(store.plan[dkey(new Date())]):null;
+  return (tr?'<button type="button" class="dedic tonight" data-act="open" data-id="'+esc(tr.id)+'"><div class="hh" aria-hidden="true">♥</div><div><b>Today: '+esc(tr.name)+'</b><span>Tap to open the recipe</span></div></button>':'')+'<div class="dedic"><div class="hh" aria-hidden="true">♥</div><div><b>For Bubu, my love</b><span>Every recipe in here is something to cook together. Made with love, one pan at a time.</span></div></div>'+'<div class="tools"><input id="q" class="search" type="search" placeholder="Search recipes, cuisines or ingredients" value="'+esc(S.q)+'" aria-label="Search recipes">'+
     '<div class="chips">'+chips+'</div></div>'+
     (storeOK?'':'<div class="notice">This view cannot save your edits between visits. Use Backup to copy them out, or install the app from a web address.</div>')+
     '<div class="count" id="count"></div><div class="grid" id="grid"></div>';
@@ -428,7 +442,7 @@ function recipeView(){
   var fav=store.favs.indexOf(r.id)>=0,pan=panLines(r);
   return '<div class="rhead"><div class="rtop"><button type="button" class="btn" data-act="nav" data-v="library">‹ Recipes</button><span class="sp"></span>'+
     '<button type="button" class="icon-btn" data-act="fav" data-id="'+esc(r.id)+'" aria-pressed="'+fav+'" aria-label="Save to favourites">'+(fav?'★':'☆')+'</button>'+
-    '<button type="button" class="btn" data-act="edit" data-id="'+esc(r.id)+'">Edit</button>'+
+    '<button type="button" class="btn" data-act="planthis" data-id="'+esc(r.id)+'">♥ Plan a day</button><button type="button" class="btn" data-act="edit" data-id="'+esc(r.id)+'">Edit</button>'+
     '<button type="button" class="btn" data-act="dupe" data-id="'+esc(r.id)+'">Duplicate</button></div>'+
     '<h1>'+esc(r.name)+'</h1>'+
     '<div class="facts"><span>'+esc(r.cuisine)+'</span><span><b>'+r.time+'</b> min</span>'+(r.spicy?'<span>Heat <b>'+r.spicy+'/3</b></span>':'')+(r.kcal?'<span><b>'+r.kcal+'</b> kcal</span>':'')+(r.protein?'<span><b>'+r.protein+'</b> g protein</span>':'')+'<span>per serving, estimate</span></div>'+
@@ -441,6 +455,41 @@ function recipeView(){
     (pan.length?'<div class="note pan"><h4>Stainless pan</h4>'+pan.map(function(p){return '<p>'+esc(p)+'</p>'}).join('')+'</div>':'')+
     (r.tip?'<div class="note"><h4>Chef\'s note</h4><p>'+esc(r.tip)+'</p></div>':'')+'</section></div>'+
     '<div class="cta"><button type="button" class="btn primary big" data-act="cook" data-id="'+esc(r.id)+'">Start cooking</button></div>';
+}
+
+/* planner */
+function dkey(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+function nextDays(n){var a=[],t=new Date();t.setHours(12,0,0,0);for(var i=0;i<n;i++){var d=new Date(t.getTime());d.setDate(t.getDate()+i);a.push({key:dkey(d),label:d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'}),rel:i===0?'Today':(i===1?'Tomorrow':'')})}return a}
+function planView(){
+  var days=nextDays(14);
+  return '<h1 style="margin:.4rem 0 .2rem">Plan ♥</h1><p class="hint">Pick what to cook on each day. Tap a recipe to open it.</p><div class="plan">'+days.map(function(d){
+    var r=store.plan[d.key]?byId(store.plan[d.key]):null;
+    return '<div class="prow"><div class="pday"><b>'+esc(d.rel||d.label.split(' ')[0])+'</b><span>'+esc(d.rel?d.label:d.label.slice(d.label.indexOf(' ')+1))+'</span></div>'+
+      (r?'<button type="button" class="pname" data-act="open" data-id="'+esc(r.id)+'">'+esc(r.name)+'<small>'+esc(r.cuisine)+' · '+r.time+' min</small></button>'+
+        '<button type="button" class="btn" data-act="pick" data-day="'+d.key+'">Change</button><button type="button" class="btn" data-act="unplan" data-day="'+d.key+'" aria-label="Clear this day">✕</button>'
+      :'<span class="pname empty">Nothing planned</span><button type="button" class="btn primary" data-act="pick" data-day="'+d.key+'">Choose</button><button type="button" class="btn" data-act="surprise" data-day="'+d.key+'">Surprise me</button>')+'</div>';
+  }).join('')+'</div>';
+}
+function pickModal(day){
+  S.pickDay=day;
+  openModal('<h2>Choose a recipe</h2><input id="pq" class="search" type="search" placeholder="Search recipes" aria-label="Search recipes"><div id="plist" class="plist"></div><div class="actions"><button type="button" class="btn" data-act="mclose">Close</button></div>');
+  drawPick('');
+}
+function drawPick(q){
+  q=q.toLowerCase().trim();
+  var l=allRecipes().filter(function(r){return !q||(r.name+' '+r.cuisine).toLowerCase().indexOf(q)>=0});
+  l.sort(function(a,b){return (store.favs.indexOf(b.id)>=0)-(store.favs.indexOf(a.id)>=0)});
+  $('#plist').innerHTML=l.map(function(r){return '<button type="button" class="pitem" data-act="assign" data-id="'+esc(r.id)+'"><b>'+(store.favs.indexOf(r.id)>=0?'★ ':'')+esc(r.name)+'</b><small>'+esc(r.cuisine)+' · '+r.time+' min'+(r.spicy?' · spicy '+r.spicy+'/3':'')+'</small></button>'}).join('')||'<div class="empty">Nothing matches.</div>';
+}
+function dayModal(id){
+  S.planRecipe=id;var r=byId(id);
+  openModal('<h2>Cook this on…</h2><p class="hint">'+esc(r.name)+'</p><div class="plist">'+nextDays(14).map(function(d){var o=store.plan[d.key]?byId(store.plan[d.key]):null;
+    return '<button type="button" class="pitem" data-act="assignday" data-day="'+d.key+'"><b>'+esc(d.rel?d.rel+' · '+d.label:d.label)+'</b><small>'+(o?'Replaces: '+esc(o.name):'Free')+'</small></button>'}).join('')+'</div><div class="actions"><button type="button" class="btn" data-act="mclose">Close</button></div>');
+}
+function setPlan(day,id){
+  store.plan[day]=id;saveStore();closeModal();
+  var r=byId(id);toast((r?r.name:'Recipe')+' planned.');
+  if(S.view==='plan')render();
 }
 
 /* guide */
@@ -633,11 +682,19 @@ function act(a,d,el){
     case 'reset':{var id2=S.draft.id;delete store.edits[id2];saveStore();S.draft=JSON.parse(JSON.stringify(byId(id2)));render();toast('Original restored. Save or cancel to leave.');break}
     case 'backup':backupModal();break;
     case 'mclose':closeModal();break;
+    case 'pick':pickModal(d.day);break;
+    case 'assign':setPlan(S.pickDay,d.id);break;
+    case 'planthis':dayModal(d.id);break;
+    case 'assignday':setPlan(d.day,S.planRecipe);break;
+    case 'unplan':delete store.plan[d.day];saveStore();render();break;
+    case 'surprise':{var used={};nextDays(14).forEach(function(x){if(store.plan[x.key])used[store.plan[x.key]]=1});
+      var all=allRecipes(),pool=all.filter(function(r){return !used[r.id]}),fp=pool.filter(function(r){return store.favs.indexOf(r.id)>=0});
+      if(!pool.length)pool=all;var pl=(fp.length&&Math.random()<0.5)?fp:pool;setPlan(d.day,pl[Math.floor(Math.random()*pl.length)].id);break}
     case 'bkcopy':{var ta=$('#bk');ta.select();var done=function(){toast('Copied.')};
       try{navigator.clipboard.writeText(ta.value).then(done,function(){try{document.execCommand('copy');done()}catch(e){toast('Press and hold the text to copy.')}})}catch(e){try{document.execCommand('copy');done()}catch(e2){toast('Press and hold the text to copy.')}}break}
     case 'bkdl':{var bl=new Blob([JSON.stringify(store)],{type:'application/json'}),a2=document.createElement('a');a2.href=URL.createObjectURL(bl);a2.download='global-flavours-backup.json';document.body.appendChild(a2);a2.click();a2.remove();break}
     case 'bkimp':{try{var o=JSON.parse($('#bki').value);if(!o||typeof o!=='object'||!Array.isArray(o.added))throw 0;
-        store.edits=o.edits||{};store.added=o.added;store.deleted=o.deleted||[];store.favs=o.favs||[];saveStore();closeModal();S.view='library';render();toast('Backup restored.')}catch(e){toast('That text is not a valid backup.')}break}
+        store.edits=o.edits||{};store.added=o.added;store.deleted=o.deleted||[];store.favs=o.favs||[];store.plan=o.plan||{};saveStore();closeModal();S.view='library';render();toast('Backup restored.')}catch(e){toast('That text is not a valid backup.')}break}
     case 'undel':store.deleted=[];saveStore();closeModal();render();toast('Deleted recipes are back.');break;
     case 'cook':startCook(d.id);break;
     case 'cookexit':exitCook();break;
@@ -664,6 +721,7 @@ document.addEventListener('change',function(e){
 });
 document.addEventListener('input',function(e){
   if(e.target.id==='q'){S.q=e.target.value;renderGrid()}
+  else if(e.target.id==='pq')drawPick(e.target.value);
 });
 document.addEventListener('keydown',function(e){
   if(!S.cook)return;
