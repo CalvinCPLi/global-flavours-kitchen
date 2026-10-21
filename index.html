@@ -6,14 +6,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Flavours">
-<meta name="theme-color" content="#eceff1" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#101417" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-title" content="Bubu's Kitchen">
+<meta name="theme-color" content="#fbf1f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a1215" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <style>:root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
-<title>Global Flavours Kitchen</title>
+<title>Bubu's Kitchen</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,18 +21,18 @@
 <style>
 /* Layout: a library of recipe cards, a two-column recipe sheet, and a full-screen cook mode with big type, timers and a pan check. */
 :root{
-  --bg:#eceff1; --surface:#f8fafb; --surface2:#dfe4e8; --ink:#171c20; --muted:#55616a;
-  --line:#c5cdd3; --accent:#c2410c; --accent-ink:#ffffff; --good:#2b7a4b; --warn:#a15c00;
+  --bg:#fbf1f2; --surface:#fffafa; --surface2:#f4e1e4; --ink:#2a1a1e; --muted:#6d5459;
+  --line:#e6cdd2; --accent:#be185d; --accent-ink:#ffffff; --good:#2b7a4b; --warn:#a15c00;
   --display:'Archivo','Arial Narrow',system-ui,sans-serif;
   --body:'Atkinson Hyperlegible',system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#101417; --surface:#181e22; --surface2:#222a30; --ink:#eef2f4; --muted:#9aa7b0;
-  --line:#2f3942; --accent:#ff8a4c; --accent-ink:#1b0f07; --good:#6cc58c; --warn:#e8b04a; color-scheme:dark}}
+  --bg:#1a1215; --surface:#231a1d; --surface2:#2e2226; --ink:#f8eef0; --muted:#b79ea4;
+  --line:#46343a; --accent:#ff8fb1; --accent-ink:#2a0d17; --good:#6cc58c; --warn:#e8b04a; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#101417; --surface:#181e22; --surface2:#222a30; --ink:#eef2f4; --muted:#9aa7b0;
-  --line:#2f3942; --accent:#ff8a4c; --accent-ink:#1b0f07; --good:#6cc58c; --warn:#e8b04a; color-scheme:dark}
+  --bg:#1a1215; --surface:#231a1d; --surface2:#2e2226; --ink:#f8eef0; --muted:#b79ea4;
+  --line:#46343a; --accent:#ff8fb1; --accent-ink:#2a0d17; --good:#6cc58c; --warn:#e8b04a; color-scheme:dark}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{background:var(--bg);color:var(--ink);font:400 1.125rem/1.5 var(--body);
@@ -188,13 +188,18 @@ body.cooking .tray{bottom:calc(92px + env(safe-area-inset-bottom,0px));padding-b
   padding:calc(1rem + env(safe-area-inset-top,0px)) 1.2rem 1.2rem;overflow:auto;box-shadow:-8px 0 30px #0004}
 .drawer h2{font-size:1.4rem;margin-bottom:.5rem}
 @media (prefers-reduced-motion:reduce){.tm.done{animation:none}}
+.dedic{margin:.2rem 0 1rem;padding:1rem 1.2rem;border:1.5px solid var(--accent);border-radius:18px;background:var(--surface);display:flex;gap:.9rem;align-items:center}
+.dedic .hh{font-size:2rem;line-height:1;color:var(--accent)}
+.dedic b{font-weight:800;font-size:1.15rem;display:block}
+.dedic span{color:var(--muted);font-size:.98rem}
+.kick.love{color:var(--accent)}
 </style>
 
 </head>
 <body>
 <div id="app">
   <header class="bar wrap">
-    <div class="brand">Global Flavours<small>Everyday Precision · stainless pan edition</small></div>
+    <div class="brand">Bubu's Kitchen <span aria-hidden="true" style="color:var(--accent)">♥</span><small>Cooked with love · stainless pan edition</small></div>
     <div class="seg" role="group" aria-label="Section">
       <button type="button" id="nav-library" data-act="nav" data-v="library" aria-pressed="true">Recipes</button>
       <button type="button" id="nav-guide" data-act="nav" data-v="guide" aria-pressed="false">Guide</button>
@@ -386,7 +391,7 @@ function go(view,id){S.view=view;if(id!==undefined)S.id=id;render();window.scrol
 
 function libraryView(){
   var chips=FILTERS.map(function(f){return '<button type="button" class="chip" data-act="filter" data-f="'+f[0]+'" aria-pressed="'+(S.filter===f[0])+'">'+esc(f[1])+'</button>'}).join('');
-  return '<div class="tools"><input id="q" class="search" type="search" placeholder="Search recipes, cuisines or ingredients" value="'+esc(S.q)+'" aria-label="Search recipes">'+
+  return '<div class="dedic"><div class="hh" aria-hidden="true">♥</div><div><b>For Bubu, my love</b><span>Every recipe in here is something to cook together. Made with love, one pan at a time.</span></div></div>'+'<div class="tools"><input id="q" class="search" type="search" placeholder="Search recipes, cuisines or ingredients" value="'+esc(S.q)+'" aria-label="Search recipes">'+
     '<div class="chips">'+chips+'</div></div>'+
     (storeOK?'':'<div class="notice">This view cannot save your edits between visits. Use Backup to copy them out, or install the app from a web address.</div>')+
     '<div class="count" id="count"></div><div class="grid" id="grid"></div>';
@@ -556,7 +561,7 @@ function renderCook(){
     body='<div class="kick">Step '+(k+1)+' of '+M+'</div><p class="big">'+esc(st.text)+'</p>'+(tb?'<div class="tbtns">'+tb+'</div>':'')+
       (nx&&nx.t==='step'?'<div class="next"><b>Next:</b> '+esc(nx.text)+'</div>':'');
   }else{
-    body='<div class="kick">Done</div><h2 style="font-size:clamp(1.8rem,4vw,2.8rem)">'+esc(r.name)+'</h2>'+(r.tip?'<div class="note"><h4>Chef\'s note</h4><p>'+esc(r.tip)+'</p></div>':'')+
+    body='<div class="kick love">Done · Bon appétit, Bubu ♥</div><h2 style="font-size:clamp(1.8rem,4vw,2.8rem)">'+esc(r.name)+'</h2>'+(r.tip?'<div class="note"><h4>Chef\'s note</h4><p>'+esc(r.tip)+'</p></div>':'')+
       '<div class="note pan"><h4>Pan care</h4><p>Let the stainless pan cool before rinsing. For stuck bits, simmer water with a drop of dish soap and loosen with a wooden spoon. Dry it right away.</p></div>'+
       '<div class="tbtns"><button type="button" class="btn" data-act="fav" data-id="'+esc(r.id)+'">'+(store.favs.indexOf(r.id)>=0?'★ Saved':'☆ Save this recipe')+'</button><button type="button" class="btn primary" data-act="cookexit">Finish</button></div>';
   }

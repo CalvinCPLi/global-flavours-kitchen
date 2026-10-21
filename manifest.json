@@ -1,13 +1,13 @@
 {
-  "name": "Global Flavours Kitchen",
-  "short_name": "Flavours",
+  "name": "Bubu's Kitchen",
+  "short_name": "Bubu",
   "description": "Cook mode, timers and editable recipes for stainless steel pans",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#eceff1",
-  "theme_color": "#101417",
+  "background_color": "#fbf1f2",
+  "theme_color": "#1a1215",
   "icons": [
     {
       "src": "icon-192.png",
