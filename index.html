@@ -216,6 +216,7 @@ button.dedic .hh,button.dedic span{color:var(--accent-ink)}
       <button type="button" id="nav-guide" data-act="nav" data-v="guide" aria-pressed="false">Guide</button>
     </div>
     <button type="button" class="btn" data-act="new">+ New</button>
+    <button type="button" class="btn" data-act="syncmodal" id="sync-btn">Sync</button>
     <button type="button" class="btn" data-act="backup">Backup</button>
   </header>
   <main id="view" class="wrap"></main>
@@ -233,7 +234,7 @@ var $=function(s){return document.querySelector(s)};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
 
 /* ---------- storage ---------- */
-var KEY='gfk.v1', storeOK=true;
+var KEY='gfk.v1', storeOK=true, noSync=false;
 var store={edits:{},added:[],deleted:[],favs:[],plan:{}};
 function loadStore(){
   try{
@@ -245,6 +246,7 @@ function loadStore(){
 function saveStore(){
   try{localStorage.setItem(KEY,JSON.stringify(store));storeOK=true}
   catch(e){storeOK=false;toast('Could not save on this device. Use Backup to keep your edits.')}
+  if(!noSync)syncSoon();
 }
 loadStore();
 if(storeOK&&navigator.storage&&navigator.storage.persist){try{navigator.storage.persist()}catch(e){}}
@@ -422,7 +424,7 @@ function renderGrid(){
     var fav=store.favs.indexOf(r.id)>=0;
     return '<button type="button" class="card" data-act="open" data-id="'+esc(r.id)+'"><h2>'+esc(r.name)+'</h2>'+
       '<div class="m">'+esc(r.cuisine)+(r.cuisine?' · ':'')+'<span class="mono">'+r.time+' min</span>'+(r.protein?' · <span class="mono">'+r.protein+' g protein</span>':'')+'</div>'+
-      '<div class="tags">'+(fav?'<span class="tag new">★ saved</span>':'')+(r.isNew?'<span class="tag new">new find</span>':'')+(r.veg?'<span class="tag veg">veg</span>':'')+(r.spicy?'<span class="tag new">spicy '+r.spicy+'/3</span>':'')+(store.edits[r.id]?'<span class="tag">edited</span>':'')+'</div></button>';
+      '<div class="tags">'+(fav?'<span class="tag new">★ saved</span>':'')+othersFav(r.id).map(function(n){return '<span class="tag new">♥ '+esc(n)+'</span>'}).join('')+(r.isNew?'<span class="tag new">new find</span>':'')+(r.veg?'<span class="tag veg">veg</span>':'')+(r.spicy?'<span class="tag new">spicy '+r.spicy+'/3</span>':'')+(store.edits[r.id]?'<span class="tag">edited</span>':'')+'</div></button>';
   }).join(''):'<div class="empty">Nothing matches. Clear the search or pick All.</div>';
 }
 
@@ -457,6 +459,90 @@ function recipeView(){
     '<div class="cta"><button type="button" class="btn primary big" data-act="cook" data-id="'+esc(r.id)+'">Start cooking</button></div>';
 }
 
+/* ---------- sync (Firebase Realtime Database over REST) ---------- */
+var SYK='gfk.sync',SY={url:'',room:'',me:'',sig:{},ts:{},pby:{},other:{},last:0,err:''},syncBusy=false,syncT=0;
+function loadSync(){try{var s=localStorage.getItem(SYK);if(s)Object.assign(SY,JSON.parse(s))}catch(e){}}
+function saveSync(){try{localStorage.setItem(SYK,JSON.stringify(SY))}catch(e){}}
+function syncOn(){return !!(SY.url&&SY.room&&SY.me)}
+function syncSoon(){if(!syncOn())return;clearTimeout(syncT);syncT=setTimeout(syncNow,1500)}
+function localItems(){
+  var L={};Object.keys(store.plan).forEach(function(d){L['plan/'+d]={id:store.plan[d]}});
+  store.added.forEach(function(r){L['recipes/'+r.id]=r});
+  Object.keys(store.edits).forEach(function(id){L['recipes/'+id]=store.edits[id]});
+  return L;
+}
+function applyRemote(kind,id,v){
+  if(kind==='plan'){if(v&&v.id)store.plan[id]=v.id;else delete store.plan[id];return}
+  if(!v)return;
+  if(isBuiltin(id)){store.edits[id]=v;return}
+  var i=store.added.findIndex(function(x){return x.id===id});
+  if(i>=0)store.added[i]=v;else store.added.push(v);
+}
+function paintSync(){
+  var b=$('#sync-btn');if(!b)return;
+  b.textContent=syncOn()?(SY.err?'Sync !':'Sync ♥'):'Sync';
+}
+function syncNow(){
+  if(!syncOn()||syncBusy)return;syncBusy=true;
+  var base=SY.url.replace(/\/+$/,'')+'/rooms/'+encodeURIComponent(SY.room);
+  fetch(base+'.json',{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status+(r.status===401||r.status===403?' (check database rules)':''));return r.json()}).then(function(remote){
+    remote=remote||{};var rp=remote.plan||{},rr=remote.recipes||{},rf=remote.favs||{};
+    var L=localItems(),now=Date.now(),patch={},changed=false,keys={};
+    Object.keys(L).concat(Object.keys(SY.sig)).forEach(function(k){if(k!=='favs')keys[k]=1});
+    Object.keys(rp).forEach(function(d){keys['plan/'+d]=1});Object.keys(rr).forEach(function(i){keys['recipes/'+i]=1});
+    Object.keys(keys).forEach(function(k){
+      var kind=k.split('/')[0],id=k.slice(kind.length+1),lv=L[k],lstr=lv===undefined?undefined:JSON.stringify(lv),ls=SY.sig[k];
+      var rv=(kind==='plan'?rp:rr)[id],chg=lstr!==ls;
+      if(chg&&ls===undefined&&rv&&rv.ts>(SY.ts[k]||0))chg=false;
+      if(chg){
+        if(lv===undefined&&kind==='recipes'){delete SY.sig[k];return}
+        patch[kind+'/'+id]={v:lv===undefined?null:lv,ts:now,by:SY.me};
+        if(lstr===undefined)delete SY.sig[k];else SY.sig[k]=lstr;
+        SY.ts[k]=now;if(kind==='plan')SY.pby[id]=SY.me;
+      }else if(rv&&rv.ts>(SY.ts[k]||0)){
+        applyRemote(kind,id,rv.v);SY.ts[k]=rv.ts;if(kind==='plan')SY.pby[id]=rv.by;
+        var nl=localItems()[k];if(nl===undefined)delete SY.sig[k];else SY.sig[k]=JSON.stringify(nl);changed=true;
+      }
+    });
+    var mine=rf[SY.me]?Object.keys(rf[SY.me]).map(function(i){return rf[SY.me][i]}):[];
+    if(SY.sig.favs===undefined){mine.forEach(function(x){if(store.favs.indexOf(x)<0&&byId(x)){store.favs.push(x);changed=true}})}
+    var fs=JSON.stringify(store.favs);
+    if(fs!==SY.sig.favs||JSON.stringify(mine)!==fs){patch['favs/'+SY.me]=store.favs.length?store.favs:null;SY.sig.favs=fs}
+    SY.other={};Object.keys(rf).forEach(function(n){if(n!==SY.me)SY.other[n]=Object.keys(rf[n]||{}).map(function(i){return rf[n][i]})});
+    var go=Object.keys(patch).length?fetch(base+'.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status)}):Promise.resolve();
+    return go.then(function(){
+      SY.err='';SY.last=Date.now();
+      if(changed){noSync=true;saveStore();noSync=false}
+      saveSync();
+      var typing=document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+      if(!S.cook&&S.view!=='edit'&&$('#modal').hidden&&!typing)render();
+    });
+  }).catch(function(e){SY.err=String(e&&e.message||e);saveSync()}).then(function(){syncBusy=false;paintSync()});
+}
+function othersFav(id){return Object.keys(SY.other).filter(function(n){return SY.other[n].indexOf(id)>=0})}
+function cleanName(s){return String(s||'').replace(/[.$#\[\]\/]/g,'').trim().slice(0,20)}
+function syncModal(pre){
+  pre=pre||{};
+  var rnd=function(){var c='abcdefghjkmnpqrstuvwxyz23456789',o='';var a=new Uint8Array(16);(window.crypto||{}).getRandomValues?crypto.getRandomValues(a):a.forEach(function(_,i){a[i]=Math.random()*256});for(var i=0;i<16;i++)o+=c[a[i]%c.length];return o};
+  if(syncOn()){
+    openModal('<h2>Sync ♥</h2><p class="hint">Connected as <b>'+esc(SY.me)+'</b>. Plans, new and edited recipes are shared. Favourites show as ♥ per person.'+(SY.last?' Last sync '+new Date(SY.last).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'.':'')+'</p>'+
+      (SY.err?'<div class="notice">Problem: '+esc(SY.err)+'</div>':'')+
+      '<div class="actions"><button type="button" class="btn primary" data-act="syncnow">Sync now</button><button type="button" class="btn" data-act="syncinvite">Copy invite link</button><button type="button" class="btn" data-act="syncoff">Disconnect</button><button type="button" class="btn" data-act="mclose">Close</button></div>'+
+      '<p class="hint">Send the invite link to your partner. They open it on their iPad, type their name and connect.</p>');
+    return;
+  }
+  openModal('<h2>Sync ♥</h2><p class="hint">Share plans, favourites and recipes between devices through a free Firebase Realtime Database. One-time setup is in the README on GitHub. Data stays in your own Firebase project.</p>'+
+    '<div class="field"><label for="sy-url">Database URL</label><input id="sy-url" type="url" placeholder="https://your-project-default-rtdb.europe-west1.firebasedatabase.app" value="'+esc(pre.u||'')+'"></div>'+
+    '<div class="field"><label for="sy-room">Shared code (keep it private)</label><input id="sy-room" value="'+esc(pre.r||'')+'" placeholder="long random code"></div>'+
+    '<div class="field"><label for="sy-me">Your name</label><input id="sy-me" placeholder="Calvin or Bubu" maxlength="20"></div>'+
+    '<div class="actions"><button type="button" class="btn primary" data-act="syncsave">Connect</button><button type="button" class="btn" data-act="syncgen">Make a code</button><button type="button" class="btn" data-act="mclose">Close</button></div>');
+  syncModal.rnd=rnd;
+}
+loadSync();
+setInterval(function(){if(document.visibilityState==='visible')syncNow()},20000);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')syncNow()});
+window.addEventListener('online',function(){syncNow()});
+
 /* planner */
 function dkey(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
 function nextDays(n){var a=[],t=new Date();t.setHours(12,0,0,0);for(var i=0;i<n;i++){var d=new Date(t.getTime());d.setDate(t.getDate()+i);a.push({key:dkey(d),label:d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'}),rel:i===0?'Today':(i===1?'Tomorrow':'')})}return a}
@@ -465,7 +551,7 @@ function planView(){
   return '<h1 style="margin:.4rem 0 .2rem">Plan ♥</h1><p class="hint">Pick what to cook on each day. Tap a recipe to open it.</p><div class="plan">'+days.map(function(d){
     var r=store.plan[d.key]?byId(store.plan[d.key]):null;
     return '<div class="prow"><div class="pday"><b>'+esc(d.rel||d.label.split(' ')[0])+'</b><span>'+esc(d.rel?d.label:d.label.slice(d.label.indexOf(' ')+1))+'</span></div>'+
-      (r?'<button type="button" class="pname" data-act="open" data-id="'+esc(r.id)+'">'+esc(r.name)+'<small>'+esc(r.cuisine)+' · '+r.time+' min</small></button>'+
+      (r?'<button type="button" class="pname" data-act="open" data-id="'+esc(r.id)+'">'+esc(r.name)+'<small>'+esc(r.cuisine)+' · '+r.time+' min'+(SY.pby[d.key]?' · picked by '+esc(SY.pby[d.key]):'')+'</small></button>'+
         '<button type="button" class="btn" data-act="pick" data-day="'+d.key+'">Change</button><button type="button" class="btn" data-act="unplan" data-day="'+d.key+'" aria-label="Clear this day">✕</button>'
       :'<span class="pname empty">Nothing planned</span><button type="button" class="btn primary" data-act="pick" data-day="'+d.key+'">Choose</button><button type="button" class="btn" data-act="surprise" data-day="'+d.key+'">Surprise me</button>')+'</div>';
   }).join('')+'</div>';
@@ -682,6 +768,17 @@ function act(a,d,el){
     case 'reset':{var id2=S.draft.id;delete store.edits[id2];saveStore();S.draft=JSON.parse(JSON.stringify(byId(id2)));render();toast('Original restored. Save or cancel to leave.');break}
     case 'backup':backupModal();break;
     case 'mclose':closeModal();break;
+    case 'syncmodal':syncModal();break;
+    case 'syncgen':$('#sy-room').value=syncModal.rnd();break;
+    case 'syncsave':{var u=($('#sy-url').value||'').trim(),rm=($('#sy-room').value||'').trim().replace(/[^A-Za-z0-9_-]/g,''),nm=cleanName($('#sy-me').value);
+      if(!/^(https:\/\/|http:\/\/(127\.0\.0\.1|localhost)[:\/])[^\s]+$/.test(u)||rm.length<8||!nm){toast('Need an https database URL, a code of 8+ letters/numbers, and your name.');break}
+      SY={url:u.replace(/\/+$/,''),room:rm,me:nm,sig:{},ts:{},pby:{},other:{},last:0,err:''};saveSync();closeModal();
+      try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
+      toast('Connecting...');paintSync();syncNow();break}
+    case 'syncnow':syncBusy=false;syncNow();toast('Syncing...');setTimeout(function(){if(!$('#modal').hidden)syncModal()},1500);break;
+    case 'syncinvite':{var link=location.origin+location.pathname+'#sync='+btoa(JSON.stringify({u:SY.url,r:SY.room}));
+      try{navigator.clipboard.writeText(link).then(function(){toast('Invite link copied.')},function(){prompt('Copy this link',link)})}catch(e){prompt('Copy this link',link)}break}
+    case 'syncoff':SY.url='';SY.room='';SY.sig={};SY.ts={};SY.pby={};SY.other={};saveSync();closeModal();paintSync();render();toast('Disconnected. Your local data stays.');break;
     case 'pick':pickModal(d.day);break;
     case 'assign':setPlan(S.pickDay,d.id);break;
     case 'planthis':dayModal(d.id);break;
@@ -736,7 +833,10 @@ document.addEventListener('touchend',function(e){
   if(Math.abs(dx)>90){act(dx<0?'cnext':'cprev',{})}
 },{passive:true});
 
-render();
+render();paintSync();
+(function(){var m=/#sync=([A-Za-z0-9+\/=]+)/.exec(location.hash||'');
+  if(m&&!syncOn()){try{var j=JSON.parse(atob(m[1]));syncModal({u:j.u,r:j.r})}catch(e){}}
+  else if(syncOn())setTimeout(syncNow,300)})();
 })();
 </script>
 
